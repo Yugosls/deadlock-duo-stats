@@ -200,13 +200,25 @@ async function fetchJson(url, { fetchImpl = globalThis.fetch, signal, timeoutMs 
   }
 }
 
-export function buildMateStatsUrl(accountId, threshold) {
+export function buildMateStatsUrl(accountId, threshold, sameParty = true) {
   const url = new URL(`/v1/players/${accountId}/mate-stats`, API_ORIGIN);
-  url.searchParams.set("same_party", "true");
+  url.searchParams.set("same_party", sameParty === false || sameParty === "false" ? "false" : "true");
   if (Number.isSafeInteger(threshold) && threshold > 0) {
     url.searchParams.set("min_matches_played", String(threshold));
   }
   return url.toString();
+}
+
+export async function fetchMateStats(accountId, samePartyBool, { fetchImpl, signal, threshold, attempts } = {}) {
+  const sameParty = !(samePartyBool === false || samePartyBool === "false");
+  const url = buildMateStatsUrl(accountId, threshold, sameParty);
+  const envelope = await fetchWithRetry(url, {
+    fetchImpl,
+    signal,
+    ...(attempts !== undefined ? { attempts } : {}),
+  });
+  const rows = Array.isArray(envelope.data) ? envelope.data.map(normalizeMateRow).filter(Boolean) : [];
+  return { account: accountId, rows };
 }
 
 export function buildSteamBatchUrl(accountIds) {
@@ -293,6 +305,8 @@ export function attachPairColors(pairs) {
 }
 
 async function fetchWithRetry(url, { fetchImpl, signal, attempts = 3 }) {
+  // inFlight key is the full URL, which embeds same_party=true|false via
+  // buildMateStatsUrl, so true/false rounds for one account never collide.
   let lastError = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (signal?.aborted) {
@@ -374,20 +388,22 @@ export async function runBridge(options = {}) {
     return emitError(query, "empty_roster", {}, titleOptions);
   }
 
-  let mateRows;
-  try {
-    mateRows = await runWithLimit(accounts, MAX_CONCURRENT_REQUESTS, async (account) => {
+  const fetchAllMateRows = (samePartyBool) =>
+    runWithLimit(accounts, MAX_CONCURRENT_REQUESTS, async (account) => {
       try {
-        const envelope = await fetchWithRetry(buildMateStatsUrl(account, query.threshold), {
+        return await fetchMateStats(account, samePartyBool, {
           fetchImpl: deps.fetchImpl,
           signal: deps.signal,
+          threshold: query.threshold,
         });
-        const rows = Array.isArray(envelope.data) ? envelope.data.map(normalizeMateRow).filter(Boolean) : [];
-        return { account, rows };
       } catch (error) {
         return { account, rows: [], error };
       }
     });
+
+  let mateRowsTrue;
+  try {
+    mateRowsTrue = await fetchAllMateRows(true);
   } catch (error) {
     const failure = genericError(error);
     return emitError(query, failure.code, failure, titleOptions);
@@ -396,8 +412,27 @@ export async function runBridge(options = {}) {
     return { ok: false, aborted: true };
   }
 
-  const statsByPlayer = new Map(mateRows.map((entry) => [entry.account, entry.rows]));
-  const pairs = attachPairColors(findDuoPairs(accounts, statsByPlayer, query.threshold));
+  const statsTrue = new Map(mateRowsTrue.map((entry) => [entry.account, entry.rows]));
+  const pairsTrue = attachPairColors(findDuoPairs(accounts, statsTrue, query.threshold));
+  const hasTrueData = mateRowsTrue.some((entry) => entry.rows.length > 0);
+
+  let pairs = pairsTrue;
+  let note = `Same-party queue history, threshold ${query.threshold}.`;
+  if (pairsTrue.length === 0 && !hasTrueData) {
+    let mateRowsFalse;
+    try {
+      mateRowsFalse = await fetchAllMateRows(false);
+    } catch (error) {
+      const failure = genericError(error);
+      return emitError(query, failure.code, failure, titleOptions);
+    }
+    if (deps.signal?.aborted) {
+      return { ok: false, aborted: true };
+    }
+    const statsFalse = new Map(mateRowsFalse.map((entry) => [entry.account, entry.rows]));
+    pairs = attachPairColors(findDuoPairs(accounts, statsFalse, query.threshold));
+    note = `Same-team history (party unavailable), threshold ${query.threshold}.`;
+  }
 
   let names = new Map(accounts.map((account) => [account, `#${account}`]));
   try {
@@ -423,7 +458,7 @@ export async function runBridge(options = {}) {
       players,
       pairs,
       threshold: query.threshold,
-      note: `Same-party queue history, threshold ${query.threshold}.`,
+      note,
       generated: safeIsoNow(deps.now),
     });
   } catch {

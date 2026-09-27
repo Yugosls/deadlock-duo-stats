@@ -64,12 +64,23 @@ export function parseBridgeQuery(search = "") {
     return { ok: false, code: "invalid_query", request: null, protocol: DUO_PROTOCOL, message: "Invalid duo bridge request." };
   }
   const rawAccounts = oneQueryValue(params, "accounts");
+  const rawAccount = oneQueryValue(params, "account_id");
   const rawThreshold = params.has("threshold") ? oneQueryValue(params, "threshold") : null;
   const rawRequest = oneQueryValue(params, "request");
   const rawProtocol = params.has("protocol") ? oneQueryValue(params, "protocol") : "1";
   const protocol = rawProtocol !== null && /^\d+$/.test(String(rawProtocol)) ? Number(rawProtocol) : null;
   const request = normalizeRequest(rawRequest);
   const threshold = rawThreshold === null ? DUO_THRESHOLD : normalizeThreshold(rawThreshold);
+  if (rawAccounts !== null && rawAccount !== null) {
+    return { ok: false, code: "invalid_query", request, protocol: DUO_PROTOCOL, message: "Invalid duo bridge request." };
+  }
+  if (rawAccount !== null) {
+    const account = normalizeAccount(rawAccount.trim());
+    if (account === null || threshold === null || request === null || protocol !== DUO_PROTOCOL) {
+      return { ok: false, code: "invalid_query", request, protocol: DUO_PROTOCOL, message: "Invalid duo bridge request." };
+    }
+    return { ok: true, mode: "mates", account, threshold, request, protocol };
+  }
   const accounts =
     typeof rawAccounts === "string"
       ? [...new Set(rawAccounts.split(",").map((part) => normalizeAccount(part.trim())).filter((account) => account !== null))]
@@ -77,7 +88,7 @@ export function parseBridgeQuery(search = "") {
   if (accounts === null || accounts.length < 1 || accounts.length > MAX_PLAYERS || threshold === null || request === null || protocol !== DUO_PROTOCOL) {
     return { ok: false, code: "invalid_query", request, protocol: DUO_PROTOCOL, message: "Invalid duo bridge request." };
   }
-  return { ok: true, accounts, threshold, request, protocol };
+  return { ok: true, mode: "roster", accounts, threshold, request, protocol };
 }
 
 function truncateName(name, account) {
@@ -124,6 +135,61 @@ function normalizeWins(value, coMatches) {
     return null;
   }
   return wins;
+}
+
+export function buildMatesTitle({ request, protocol = DUO_PROTOCOL, account, threshold = DUO_THRESHOLD, mates = [], note = "", generated = "" }) {
+  if (!normalizeRequest(request) || protocol !== DUO_PROTOCOL) {
+    throw new TypeError("request and protocol must be valid");
+  }
+  if (normalizeAccount(account) === null) {
+    throw new TypeError("account must be valid");
+  }
+  if (normalizeThreshold(threshold) === null) {
+    throw new TypeError("threshold must be valid");
+  }
+  const clean = [];
+  for (const mate of mates) {
+    if (!mate || typeof mate !== "object" || Array.isArray(mate)) {
+      continue;
+    }
+    const mateId = normalizeAccount(mate.account);
+    const matches = Number(mate.matches);
+    const wins = Number(mate.wins);
+    if (mateId === null || mateId === account) {
+      continue;
+    }
+    if (!Number.isSafeInteger(matches) || matches < threshold) {
+      continue;
+    }
+    if (!Number.isSafeInteger(wins) || wins < 0 || wins > matches) {
+      continue;
+    }
+    clean.push({ account: mateId, name: truncateName(mate.name, mateId), matches, wins });
+  }
+  clean.sort((left, right) => right.matches - left.matches || left.account - right.account);
+  let kept = clean.slice(0, MAX_PAIRS_PER_TITLE);
+  let droppedMates = clean.length - kept.length;
+  const payload = () => ({
+    v: DUO_PROTOCOL,
+    kind: "duo_mates",
+    request,
+    account,
+    threshold,
+    mates: kept,
+    droppedMates,
+    note: typeof note === "string" ? note.slice(0, 120) : "",
+    generated: typeof generated === "string" ? generated.slice(0, 64) : "",
+  });
+  // Shrink weakest mates first so the title always fits the Panorama budget.
+  while (kept.length > 0 && JSON.stringify(payload()).length > DUO_BUDGET_JSON_BYTES) {
+    kept = kept.slice(0, -1);
+    droppedMates += 1;
+  }
+  const title = `${DUO_TITLE_PREFIX}${JSON.stringify(payload())}`;
+  if (title.length > DUO_TITLE_MAX_LENGTH) {
+    throw new RangeError("duo payload exceeds the Panorama title budget");
+  }
+  return title;
 }
 
 export function buildSuccessTitle({ request, protocol = DUO_PROTOCOL, players = [], pairs = [], threshold = DUO_THRESHOLD, note = "", generated = "" }) {

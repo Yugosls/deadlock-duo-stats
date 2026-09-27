@@ -186,7 +186,6 @@
     };
     var AUTHORITY_NAMES = ["accountid", "steamid"];
     var ROW_COUNT = 8;
-    var MAX_PLAYERS = 12;
     var CACHE_TTL_MS = 10 * 60 * 1000;
     var CACHE_SCHEMA = "profile_stats_duo_v1";
     var CONTEXT_CHECK_SECONDS = 0.5;
@@ -211,7 +210,6 @@
         "network_error": true,
         "upstream_error": true,
         "rate_limit": true,
-        "empty_roster": true,
         "empty_sample": true,
         "invalid_payload": true,
         "internal_error": true
@@ -222,8 +220,7 @@
         "network_error": "The duo service could not be reached.",
         "upstream_error": "The duo service is unavailable.",
         "rate_limit": "The duo service is rate-limited. Try again later.",
-        "empty_roster": "No players were available for this roster.",
-        "empty_sample": "No roster teammates found with shared games yet.",
+        "empty_sample": "No repeat teammates found for this profile yet.",
         "invalid_payload": "The duo response was invalid.",
         "internal_error": "The duo service returned an internal error."
     };
@@ -354,17 +351,6 @@
         }
     }
 
-    // Roster source for ?accounts=. The stock profile page does not expose a
-    // machine-readable match roster to Panorama (history rows are engine-bound
-    // snippets, not account-id panels), and there is no roster API on this
-    // surface — so a single viewed profile can only seed a 1-player roster,
-    // which the bridge answers with players[] and zero pairs. Full pair data
-    // needs a real roster: extend this function when a second account source
-    // (party panel, second witness, picker) is available, then pass the joined
-    // list through request.roster.
-    function resolveMatchRoster(viewedAccount) {
-        return viewedAccount ? String(viewedAccount) : "";
-    }
     function registerPanelEvent(panel, eventName, handler) {
         if (!isValidPanel(panel) || !isCallable(handler) || !isCallable($.RegisterEventHandler)) {
             return false;
@@ -684,67 +670,37 @@
         return typeof value === "string" && value.length > 0 && value.length <= MAX_NAME_LENGTH && isAscii(value);
     }
 
-    function validPlayers(players) {
+    function validMates(mates, account, threshold) {
         var index;
         var seen = {};
-        if (!isArray(players) || players.length === 0 || players.length > MAX_PLAYERS) {
-            return false;
-        }
-        for (index = 0; index < players.length; index += 1) {
-            if (!exactKeys(players[index], ["account", "name"])) {
-                return false;
-            }
-            if (!validAccountId(players[index].account) || !validPlayerName(players[index].name)) {
-                return false;
-            }
-            if (seen[players[index].account]) {
-                return false;
-            }
-            seen[players[index].account] = true;
-        }
-        return true;
-    }
-
-    function validPair(pair, roster, threshold) {
-        if (!exactKeys(pair, ["a", "b", "coMatches", "color"], ["wins"])) {
-            return false;
-        }
-        if (!validAccountId(pair.a) || !validAccountId(pair.b) || pair.a === pair.b) {
-            return false;
-        }
-        if (!roster[pair.a] || !roster[pair.b]) {
-            return false;
-        }
-        if (!finiteNumber(pair.coMatches) || Math.floor(pair.coMatches) !== pair.coMatches || pair.coMatches < threshold) {
-            return false;
-        }
-        if (!finiteNumber(pair.color) || Math.floor(pair.color) !== pair.color || pair.color < 0 || pair.color >= ROW_COUNT) {
-            return false;
-        }
-        if (hasOwn(pair, "wins") && (!finiteNumber(pair.wins) || Math.floor(pair.wins) !== pair.wins || pair.wins < 0 || pair.wins > pair.coMatches)) {
-            return false;
-        }
-        return true;
-    }
-
-    function validPairs(pairs, players, threshold) {
-        var index;
-        var roster = {};
         var previous = Infinity;
-        if (!isArray(pairs) || pairs.length > ROW_COUNT) {
+        if (!isArray(mates) || mates.length === 0 || mates.length > ROW_COUNT) {
             return false;
         }
-        for (index = 0; index < players.length; index += 1) {
-            roster[players[index].account] = true;
-        }
-        for (index = 0; index < pairs.length; index += 1) {
-            if (!validPair(pairs[index], roster, threshold)) {
+        for (index = 0; index < mates.length; index += 1) {
+            if (!exactKeys(mates[index], ["account", "name", "matches", "wins"])) {
                 return false;
             }
-            if (pairs[index].coMatches > previous) {
+            if (!validAccountId(mates[index].account) || mates[index].account === account) {
                 return false;
             }
-            previous = pairs[index].coMatches;
+            if (seen[mates[index].account]) {
+                return false;
+            }
+            seen[mates[index].account] = true;
+            if (!validPlayerName(mates[index].name)) {
+                return false;
+            }
+            if (!finiteNumber(mates[index].matches) || Math.floor(mates[index].matches) !== mates[index].matches || mates[index].matches < threshold) {
+                return false;
+            }
+            if (!finiteNumber(mates[index].wins) || Math.floor(mates[index].wins) !== mates[index].wins || mates[index].wins < 0 || mates[index].wins > mates[index].matches) {
+                return false;
+            }
+            if (mates[index].matches > previous) {
+                return false;
+            }
+            previous = mates[index].matches;
         }
         return true;
     }
@@ -756,7 +712,7 @@
         if (payload.request !== request.nonce) {
             return "stale";
         }
-        if (payload.threshold !== request.minMatches) {
+        if (!payloadAccountMatches(payload.account, request.account) || payload.threshold !== request.minMatches) {
             return "invalid";
         }
         return "ok";
@@ -767,13 +723,13 @@
         if (identityResult !== "ok") {
             return identityResult;
         }
-        if (!exactKeys(payload, ["v", "kind", "request", "players", "pairs", "threshold", "droppedPairs", "note", "generated"])) {
+        if (!exactKeys(payload, ["v", "kind", "request", "account", "threshold", "mates", "droppedMates", "note", "generated"])) {
             return "invalid";
         }
-        if (payload.v !== BRIDGE_PROTOCOL || payload.kind !== "duo_match" || typeof payload.request !== "string") {
+        if (payload.v !== BRIDGE_PROTOCOL || payload.kind !== "duo_mates" || typeof payload.request !== "string" || !validAccountId(payload.account)) {
             return "invalid";
         }
-        if (!validThreshold(payload.threshold) || !finiteNumber(payload.droppedPairs) || Math.floor(payload.droppedPairs) !== payload.droppedPairs || payload.droppedPairs < 0) {
+        if (!validThreshold(payload.threshold) || !finiteNumber(payload.droppedMates) || Math.floor(payload.droppedMates) !== payload.droppedMates || payload.droppedMates < 0) {
             return "invalid";
         }
         if (typeof payload.note !== "string" || payload.note.length > 120 || (payload.note.length > 0 && !isAscii(payload.note))) {
@@ -782,10 +738,7 @@
         if (typeof payload.generated !== "string" || payload.generated.length === 0 || payload.generated.length > MAX_GENERATED_LENGTH || !isAscii(payload.generated)) {
             return "invalid";
         }
-        if (!validPlayers(payload.players)) {
-            return "invalid";
-        }
-        return validPairs(payload.pairs, payload.players, payload.threshold) ? "ok" : "invalid";
+        return validMates(payload.mates, payload.account, payload.threshold) ? "ok" : "invalid";
     }
 
     function validErrorEnvelope(payload) {
@@ -853,8 +806,7 @@
                 memoryCache.payload.v !== BRIDGE_PROTOCOL) {
             return null;
         }
-        if (!validPlayers(memoryCache.payload.players) ||
-                !validPairs(memoryCache.payload.pairs, memoryCache.payload.players, memoryCache.payload.threshold)) {
+        if (!validMates(memoryCache.payload.mates, memoryCache.payload.account, memoryCache.payload.threshold)) {
             return null;
         }
         age = now() - memoryCache.receivedAt;
@@ -886,35 +838,50 @@
         }
     }
 
-    function renderPairRows(pairs, players) {
+    function renderMatesRows(mates) {
         var index;
-        var pair;
-        var names = {};
+        var mate;
         var refs;
-        var other;
-        var wins;
-        for (index = 0; index < players.length; index += 1) {
-            names[players[index].account] = players[index].name;
-        }
         for (index = 0; index < ROW_COUNT; index += 1) {
             refs = rowRefs[index];
             if (!refs) {
                 continue;
             }
-            if (index >= pairs.length) {
+            if (index >= mates.length) {
                 setRowVisible(refs, false);
                 continue;
             }
-            pair = pairs[index];
-            other = String(pair.a) === String(currentIdentity.account) ? pair.b : pair.a;
-            wins = hasOwn(pair, "wins") ? pair.wins : null;
+            mate = mates[index];
             setRowVisible(refs, true);
-            setText(refs.name, names[other] || ("Player " + String(other)));
-            setText(refs.games, String(pair.coMatches));
-            setText(refs.wins, wins === null ? "—" : String(wins));
-            setText(refs.winRate, wins === null ? "—" : formatWinRate(wins, pair.coMatches));
-            setWinRateState(refs.winRate, wins, pair.coMatches);
+            setText(refs.name, mate.name);
+            setText(refs.games, String(mate.matches));
+            setText(refs.wins, String(mate.wins));
+            setText(refs.winRate, formatWinRate(mate.wins, mate.matches));
+            setWinRateState(refs.winRate, mate.wins, mate.matches);
         }
+    }
+
+    function setBridgeVisible(visible) {
+        setVisibleProperty(bridgePanel, visible);
+        if (!visible) {
+            setStyle(bridgePanel, "visibility", "collapse");
+        } else {
+            setStyle(bridgePanel, "visibility", "visible");
+        }
+    }
+
+    function unloadBridge() {
+        if (!isValidPanel(bridgePanel)) {
+            return;
+        }
+        try {
+            if (isCallable(bridgePanel.SetURL)) {
+                bridgePanel.SetURL("about:blank");
+            }
+        } catch (error) {
+            /* A racing HTML panel is already on the unload path. */
+        }
+        setBridgeVisible(false);
     }
 
     function setRetryVisible(visible) {
@@ -929,7 +896,7 @@
     }
 
     function renderLoading() {
-        setText(statusLabel, "Loading duo stats for rosters with " + String(selectedMinMatches) + "+ shared games...");
+        setText(statusLabel, "Loading duo stats for teammates with " + String(selectedMinMatches) + "+ shared games...");
         setRowsVisible(false);
         setRetryVisible(false);
     }
@@ -964,44 +931,17 @@
     }
 
     function renderSuccess(payload) {
-        var shown = payload.pairs.length;
-        var rosterSize = payload.players.length;
-        var sampleText = "Roster (" + String(rosterSize) + " here): " + String(shown) + " duo pairs with " + String(payload.threshold) + "+ shared games";
+        var shown = payload.mates.length;
+        var extra = payload.droppedMates > 0 ? " (+" + String(payload.droppedMates) + " more)" : "";
+        var sampleText = "Repeat teammates (" + String(payload.threshold) + "+ games): " + String(shown) + " shown" + extra;
         var stale = generatedIsStale(payload.generated);
         var generatedText = "Generated: " + String(payload.generated) + (stale ? " (stale)" : "");
-        renderPairRows(payload.pairs, payload.players);
+        renderMatesRows(payload.mates);
         setText(sampleLabel, sampleText);
         setText(generatedLabel, generatedText);
         setRowsVisible(true);
         setRetryVisible(stale);
-        if (shown === 0) {
-            setText(statusLabel, "No teammates in this roster share " + String(payload.threshold) + "+ games. Open a match roster with 2+ players.");
-            return;
-        }
         setText(statusLabel, stale ? "Showing cached duo data. Retry for current values." : "Duo stats loaded.");
-    }
-
-    function setBridgeVisible(visible) {
-        setVisibleProperty(bridgePanel, visible);
-        if (!visible) {
-            setStyle(bridgePanel, "visibility", "collapse");
-        } else {
-            setStyle(bridgePanel, "visibility", "visible");
-        }
-    }
-
-    function unloadBridge() {
-        if (!isValidPanel(bridgePanel)) {
-            return;
-        }
-        try {
-            if (isCallable(bridgePanel.SetURL)) {
-                bridgePanel.SetURL("about:blank");
-            }
-        } catch (error) {
-            /* A racing HTML panel is already on the unload path. */
-        }
-        setBridgeVisible(false);
     }
 
     function cancelBridgeAssignment() {
@@ -1057,7 +997,7 @@
     }
 
     function bridgeUrl(request) {
-        return BRIDGE_URL + "?accounts=" + encodeURIComponent(request.roster) + "&threshold=" + String(request.minMatches) + "&request=" + encodeURIComponent(request.nonce) + "&protocol=" + String(BRIDGE_PROTOCOL);
+        return BRIDGE_URL + "?account_id=" + encodeURIComponent(request.account) + "&threshold=" + String(request.minMatches) + "&request=" + encodeURIComponent(request.nonce) + "&protocol=" + String(BRIDGE_PROTOCOL);
     }
 
     function expectedBridgeUrl(url, request) {
@@ -1166,17 +1106,13 @@
             finishError("invalid_payload", null);
             return;
         }
-        if (parsed.value.kind === "duo_match") {
+        if (parsed.value.kind === "duo_mates") {
             successResult = validateSuccessPayload(parsed.value, request);
             if (successResult === "stale") {
                 return;
             }
             if (successResult !== "ok") {
                 finishError("invalid_payload", null);
-                return;
-            }
-            if (parsed.value.pairs.length === 0) {
-                finishError("empty_sample", null);
                 return;
             }
             finishSuccess(parsed.value, request);
@@ -1288,21 +1224,12 @@
             generation: requestGeneration,
             nonce: createNonce(),
             account: identity.account,
-            roster: resolveMatchRoster(identity.account),
             minMatches: selectedMinMatches,
             startedAt: now(),
             lastTitle: ""
         };
-        if (request.roster.split(",").filter(function (part) { return part !== ""; }).length < 2) {
-            invalidateRequest(true);
-            rateLimitBlocked = false;
-            enterState(STATE_ERROR);
-            renderLocalError("empty_roster", null, true, 0);
-            return;
-        }
         requestState = request;
         enterState(STATE_LOADING);
-        renderLoading();
         setBridgeVisible(true);
         if (deferBridgeAssignment) {
             scheduleBridgeAssignment(request);

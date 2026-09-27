@@ -4,10 +4,10 @@ import {
   MAX_PAIRS_PER_TITLE,
   MAX_PLAYERS,
   buildErrorTitle,
+  buildMatesTitle,
   buildSuccessTitle,
   parseBridgeQuery,
 } from "./duo_stats_title.js";
-
 const API_ORIGIN = "https://api.deadlock-api.com";
 const FETCH_TIMEOUT_MS = 20000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -19,6 +19,7 @@ const ERROR_MESSAGES = Object.freeze({
   upstream_error: "The duo service returned an error.",
   rate_limit: "The duo service is rate limited.",
   empty_roster: "No players were available.",
+  empty_sample: "No repeat teammates found.",
   invalid_payload: "The duo service returned invalid data.",
   internal_error: "The duo bridge failed.",
 });
@@ -408,11 +409,73 @@ export async function runBridge(options = {}) {
   if (!query.ok) {
     return emitError(query, "invalid_query", {}, titleOptions);
   }
+  if (query.mode === "mates") {
+    return runMatesBridge(query, deps, titleOptions);
+  }
+  return runRosterBridge(query, deps, titleOptions);
+}
+
+async function runMatesBridge(query, deps, titleOptions) {
+  let rows;
+  try {
+    const fetched = await fetchMateStats(query.account, false, {
+      fetchImpl: deps.fetchImpl,
+      signal: deps.signal,
+      threshold: query.threshold,
+    });
+    rows = fetched.rows;
+  } catch (error) {
+    const failure = genericError(error);
+    return emitError(query, failure.code, failure, titleOptions);
+  }
+  if (deps.signal?.aborted) {
+    return { ok: false, aborted: true };
+  }
+  rows = [...rows].sort((left, right) => right.matchesPlayed - left.matchesPlayed || left.mateId - right.mateId);
+  const top = rows.slice(0, MAX_PAIRS_PER_TITLE);
+  let names = new Map(top.map((row) => [row.mateId, `#${row.mateId}`]));
+  if (top.length > 0) {
+    try {
+      const envelope = await fetchWithRetry(buildSteamBatchUrl(top.map((row) => row.mateId)), { fetchImpl: deps.fetchImpl, signal: deps.signal });
+      if (Array.isArray(envelope.data)) {
+        for (const row of envelope.data.map(normalizeSteamRow).filter(Boolean)) {
+          names.set(row.accountId, row.name);
+        }
+      }
+    } catch {
+      // Usernames are cosmetic. A failed batch never fails the mates table.
+    }
+  }
+  if (deps.signal?.aborted) {
+    return { ok: false, aborted: true };
+  }
+  const mates = top.map((row) => ({ account: row.mateId, name: names.get(row.mateId) ?? `#${row.mateId}`, matches: row.matchesPlayed, wins: row.wins }));
+  if (mates.length === 0) {
+    return emitError(query, "empty_sample", {}, titleOptions);
+  }
+  let title;
+  try {
+    title = buildMatesTitle({
+      request: query.request,
+      protocol: query.protocol,
+      account: query.account,
+      threshold: query.threshold,
+      mates,
+      note: `Repeat teammates, threshold ${query.threshold}.`,
+      generated: safeIsoNow(deps.now),
+    });
+  } catch {
+    return emitError(query, "invalid_payload", {}, titleOptions);
+  }
+  publishTitle(title, titleOptions);
+  return { ok: true, title, mates: mates.length, account: query.account };
+}
+
+async function runRosterBridge(query, deps, titleOptions) {
   const accounts = [...new Set(query.accounts)].slice(0, MAX_PLAYERS);
   if (accounts.length === 0) {
     return emitError(query, "empty_roster", {}, titleOptions);
   }
-
   const fetchAllMateRows = (samePartyBool) =>
     runWithLimit(accounts, MAX_CONCURRENT_REQUESTS, async (account) => {
       try {

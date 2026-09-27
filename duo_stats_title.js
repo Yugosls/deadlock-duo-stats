@@ -15,6 +15,7 @@ const ERROR_CODES = Object.freeze([
   "upstream_error",
   "rate_limit",
   "empty_roster",
+  "empty_sample",
   "invalid_payload",
   "internal_error",
 ]);
@@ -106,7 +107,23 @@ function normalizePair(pair) {
   if (!Number.isSafeInteger(color) || color < 0 || color >= 8) {
     return null;
   }
-  return { a, b, coMatches, color };
+  const clean = { a, b, coMatches, color };
+  if (pair.wins !== undefined || pair.coWins !== undefined) {
+    const wins = normalizeWins(pair.wins ?? pair.coWins, coMatches);
+    if (wins === null) {
+      return null;
+    }
+    clean.wins = wins;
+  }
+  return clean;
+}
+
+function normalizeWins(value, coMatches) {
+  const wins = Number(value);
+  if (!Number.isSafeInteger(wins) || wins < 0 || wins > coMatches) {
+    return null;
+  }
+  return wins;
 }
 
 export function buildSuccessTitle({ request, protocol = DUO_PROTOCOL, players = [], pairs = [], threshold = DUO_THRESHOLD, note = "", generated = "" }) {

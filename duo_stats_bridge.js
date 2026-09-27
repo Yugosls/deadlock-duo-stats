@@ -233,13 +233,17 @@ export function normalizeMateRow(row) {
   }
   const mateId = Number(row.mate_id);
   const matchesPlayed = Number(row.matches_played);
+  const wins = Number(row.wins);
   if (!Number.isSafeInteger(mateId) || mateId <= 0 || mateId > 4294967295) {
     return null;
   }
   if (!Number.isSafeInteger(matchesPlayed) || matchesPlayed < 0) {
     return null;
   }
-  return { mateId, matchesPlayed };
+  if (!Number.isSafeInteger(wins) || wins < 0 || wins > matchesPlayed) {
+    return null;
+  }
+  return { mateId, matchesPlayed, wins };
 }
 
 export function normalizeSteamRow(row) {
@@ -264,6 +268,21 @@ export function reconcilePairStrength(first, second) {
   return Math.min(first, second);
 }
 
+export function reconcilePairWins(first, firstWins, second, secondWins, strength) {
+  const candidates = [];
+  if (Number.isSafeInteger(firstWins) && firstWins >= 0 && first === strength) {
+    candidates.push(firstWins);
+  }
+  if (Number.isSafeInteger(secondWins) && secondWins >= 0 && second === strength) {
+    candidates.push(secondWins);
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  const wins = Math.min(...candidates);
+  return wins <= strength ? wins : null;
+}
+
 export function calculatePairKey(first, second) {
   return first < second ? `${first}:${second}` : `${second}:${first}`;
 }
@@ -283,9 +302,10 @@ export function findDuoPairs(players, statsByPlayer, threshold) {
       const key = calculatePairKey(player, mate.mateId);
       const seen = strengths.get(key);
       if (seen === undefined) {
-        strengths.set(key, { first: mate.matchesPlayed, second: null, a: Math.min(player, mate.mateId), b: Math.max(player, mate.mateId) });
+        strengths.set(key, { first: mate.matchesPlayed, firstWins: mate.wins ?? null, second: null, secondWins: null, a: Math.min(player, mate.mateId), b: Math.max(player, mate.mateId) });
       } else {
         seen.second = mate.matchesPlayed;
+        seen.secondWins = mate.wins ?? null;
       }
     }
   }
@@ -293,7 +313,12 @@ export function findDuoPairs(players, statsByPlayer, threshold) {
   for (const entry of strengths.values()) {
     const strength = reconcilePairStrength(entry.first, entry.second);
     if (strength >= threshold) {
-      pairs.push({ a: entry.a, b: entry.b, coMatches: strength });
+      const wins = reconcilePairWins(entry.first, entry.firstWins, entry.second, entry.secondWins, strength);
+      const pair = { a: entry.a, b: entry.b, coMatches: strength };
+      if (wins !== null) {
+        pair.wins = wins;
+      }
+      pairs.push(pair);
     }
   }
   pairs.sort((left, right) => right.coMatches - left.coMatches || left.a - right.a || left.b - right.b);

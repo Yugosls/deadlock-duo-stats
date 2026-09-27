@@ -63,26 +63,6 @@ CitadelProfilePage #ProfileInfo
 	wash-color: offWhite&99;
 }
 
-#ProfileStatsDuoRankHost
-{
-	width: 90px;
-	height: 70px;
-	margin-left: 200px;
-	margin-top: -10px;
-	horizontal-align: left;
-	vertical-align: top;
-	ignore-parent-flow: true;
-	overflow: noclip;
-}
-
-#ProfileStatsDuoRankImage
-{
-	width: 88px;
-	height: 66px;
-	horizontal-align: center;
-	vertical-align: center;
-}
-
 #ProfileStatsDuoPanel
 {
 	ignore-parent-flow: true;
@@ -95,6 +75,69 @@ CitadelProfilePage #ProfileInfo
 	overflow: clip;
 	background-color: offBlack;
 	box-shadow: inset -20px 0px 220px #00000088;
+}
+
+#ProfileStatsDuoSupportBar
+{
+	width: 100%;
+	height: 28px;
+	padding: 1px 0px;
+	flow-children: right;
+	background-color: offBlack;
+	opacity: 0.55;
+	overflow: clip;
+}
+
+#ProfileStatsDuoSupporterTicker
+{
+	width: fill-parent-flow(1);
+	height: 26px;
+	margin-right: 8px;
+	vertical-align: center;
+	background-color: offBlack;
+	brightness: 0.72;
+	overflow: clip;
+}
+
+.ProfileStatsDuoDonateButton
+{
+	width: 72px;
+	height: 26px;
+	padding: 0px 8px;
+	vertical-align: center;
+	background-color: offWhite&03;
+	border: 1px solid #9D824044;
+	transition-property: background-color, border;
+	transition-duration: 0.12s;
+}
+
+.ProfileStatsDuoDonateButton Label
+{
+	horizontal-align: center;
+	vertical-align: center;
+	font-size: 10px;
+	font-weight: bold;
+	letter-spacing: 1px;
+	color: #BDA66A;
+	white-space: nowrap;
+}
+
+.ProfileStatsDuoDonateButton:hover,
+.ProfileStatsDuoDonateButton:focus
+{
+	background-color: #51432066;
+	border: 1px solid #9D824088;
+}
+
+.ProfileStatsDuoDonateButton:hover Label,
+.ProfileStatsDuoDonateButton:focus Label
+{
+	color: #E9D799;
+}
+
+.ProfileStatsDuoDonateButton:active
+{
+	background-color: #514320;
 }
 
 #ProfileStatsDuoHeader
@@ -261,14 +304,6 @@ CitadelProfilePage #ProfileInfo
 	flow-children: right;
 	overflow: clip;
 	border-top: 1px solid offWhite&0d;
-}
-
-.ProfileStatsDuoAvatar
-{
-	width: 40px;
-	height: 40px;
-	vertical-align: center;
-	margin-right: 10px;
 }
 
 .ProfileStatsDuoName

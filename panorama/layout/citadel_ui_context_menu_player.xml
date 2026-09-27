@@ -21,12 +21,11 @@
 		</snippet>
 		<snippet name="ClearReadyUp">
 			<Panel class="MenuRow">
-				<TextButton id="MenuButton" text="#Citadel_PlayerContextMenu_PartyClearReady" />
+				<TextButton id="MenuButton" text="#Citadel_Party_Context_ClearReady" />
 			</Panel>
 		</snippet>
 		<snippet name="SwitchTeam">
 			<Panel class="MenuRow">
-				<Panel class="contextIcon" />
 				<TextButton id="MenuButton" text="#Citadel_Party_Context_SwitchTeam" />
 			</Panel>
 		</snippet>

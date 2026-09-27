@@ -170,12 +170,12 @@
     // Live endpoint: https://yugosls.github.io/deadlock-duo-stats/duo_stats_bridge.html
     var BRIDGE_URL = "https://yugosls.github.io/deadlock-duo-stats/duo_stats_bridge.html";
     var BRIDGE_ORIGIN_PATH = "https://yugosls.github.io/deadlock-duo-stats/duo_stats_bridge.html";
+    var SUPPORTER_TICKER_URL = "https://hantu-raya.github.io/hp-colors-preset-builder/supporters-strip/";
     var STATLOCKER_PROFILE_URL_PREFIX = "https://statlocker.gg/profile/";
     var STATLOCKER_PROFILE_URL_SUFFIX = "/matches";
     var BRIDGE_TITLE_PREFIX = "DUO1:";
     var BRIDGE_TITLE_MAX_LENGTH = 2048;
     var BRIDGE_URL_MAX_LENGTH = 4096;
-    var BRIDGE_FRAGMENT_MAX_LENGTH = 4096;
     var BRIDGE_PROTOCOL = 1;
     var DEFAULT_MIN_MATCHES = 2;
     var MIN_MATCHES_OPTIONS = {
@@ -194,9 +194,7 @@
     var REQUEST_TIMEOUT_SECONDS = 25;
     var MAX_HERO_ROWS = 64;
     var MAX_GENERATED_LENGTH = 64;
-    var MAX_NAME_LENGTH = 64;
-    var MAX_AVATAR_LENGTH = 512;
-    var MAX_ERROR_MESSAGE_LENGTH = 160;
+    var MAX_NAME_LENGTH = 32;
     var MAX_PLAYER_NAME_LENGTH = 64;
     var STATE_STOCK = "stock";
     var STATE_LOADING = "loading";
@@ -240,7 +238,6 @@
     var duoButton = null;
     var customPanel = null;
     var selfNamePanel = null;
-    var rankImage = null;
     var titleLabel = null;
     var statLockerButton = null;
     var accountWitness = null;
@@ -251,6 +248,7 @@
     var generatedLabel = null;
     var retryButton = null;
     var bridgePanel = null;
+    var supporterTicker = null;
     var minMatchesDropdown = null;
     var stockSectionSignature = "";
     var stockRowSignature = "";
@@ -258,7 +256,6 @@
     var rowRefs = [];
     var currentIdentity = null;
     var currentDisplayName = "";
-    var currentRankAccount = "";
     var lifecycleState = STATE_STOCK;
     var requestGeneration = 0;
     var watcherGeneration = 0;
@@ -591,38 +588,34 @@
         return viewedProfileIdentityPolicy.same(left, right);
     }
 
-    function renderRankImage(identity) {
-        var account;
-        if (!isValidPanel(rankImage)) {
-            return;
-        }
-        account = identity && identity.state ? identity : readIdentity();
-        account = account.state === "valid" ? account.account : "";
-        if (!isCallable(rankImage.SetImage)) {
+    function openSupporterTicker() {
+        if (!isCustomActive() || !isValidPanel(supporterTicker) || !isCallable(supporterTicker.SetURL)) {
             return;
         }
         try {
-            if (!account) {
-                if (currentRankAccount || rankImage.visible !== false) {
-                    rankImage.SetImage("");
-                }
-                rankImage.visible = false;
-                currentRankAccount = "";
-                return;
-            }
-            if (currentRankAccount !== account) {
-                if (currentRankAccount) {
-                    rankImage.visible = false;
-                    rankImage.SetImage("");
-                }
-                rankImage.SetImage("https://api.deadlock-api.com/v1/players/" + encodeURIComponent(account) + "/rank/image?format=webp");
-                currentRankAccount = account;
-            }
-            rankImage.visible = true;
+            supporterTicker.SetURL(SUPPORTER_TICKER_URL);
         } catch (error) {
-            currentRankAccount = "";
-            setVisibleProperty(rankImage, false);
+            return;
         }
+        setVisibleProperty(supporterTicker, true);
+        setVisibility(supporterTicker, true);
+    }
+
+    function closeSupporterTicker() {
+        if (!isValidPanel(supporterTicker)) {
+            return;
+        }
+        try {
+            if (isCallable(supporterTicker.SetURL)) {
+                supporterTicker.SetURL("about:blank");
+            }
+        } catch (error) {
+            setVisibleProperty(supporterTicker, false);
+            setVisibility(supporterTicker, false);
+            return;
+        }
+        setVisibleProperty(supporterTicker, false);
+        setVisibility(supporterTicker, false);
     }
 
     function isAscii(value) {
@@ -635,10 +628,6 @@
             }
         }
         return true;
-    }
-
-    function isPlainMessage(value) {
-        return typeof value === "string" && value.length > 0 && value.length <= MAX_ERROR_MESSAGE_LENGTH && isAscii(value);
     }
 
     function finiteNumber(value) {
@@ -925,13 +914,6 @@
             setText(refs.wins, wins === null ? "—" : String(wins));
             setText(refs.winRate, wins === null ? "—" : formatWinRate(wins, pair.coMatches));
             setWinRateState(refs.winRate, wins, pair.coMatches);
-            if (isValidPanel(refs.avatar) && isCallable(refs.avatar.SetImage)) {
-                try {
-                    refs.avatar.SetImage("");
-                } catch (error) {
-                    continue;
-                }
-            }
         }
     }
 
@@ -1471,6 +1453,7 @@
         enterState(STATE_DISABLED);
         stopWatcher();
         invalidateRequest(true);
+        closeSupporterTicker();
         setVisibility(customPanel, false);
         setRetryVisible(false);
     }
@@ -1501,7 +1484,6 @@
             return;
         }
         renderViewedName();
-        renderRankImage(currentIdentity);
         inspectNativeHeroSignature();
         if (!isCustomActive()) {
             return;
@@ -1563,6 +1545,7 @@
         stockRowSignature = "";
         stopWatcher();
         invalidateRequest(true);
+        closeSupporterTicker();
         setVisibility(customPanel, false);
         setRetryVisible(false);
         if (reason === "profile_change" || reason === "stock_selection" || reason === "page_leave" || reason === "native_selection") {
@@ -1579,9 +1562,9 @@
         stockSectionSignature = textOf(stockSectionName);
         stockRowSignature = readSelectedHeroSignature();
         setVisibility(customPanel, true);
+        openSupporterTicker();
         currentDisplayName = "";
         renderViewedName();
-        renderRankImage(currentIdentity);
         beginRequest();
         startWatcher();
     }
@@ -1638,17 +1621,12 @@
         beginRequest();
     }
 
-    function onPanelMouseOver() {
-        renderRankImage();
-    }
-
     function collectRowRefs() {
         var index;
         rowRefs = [];
         for (index = 0; index < ROW_COUNT; index += 1) {
             rowRefs.push({
                 row: findPanel("ProfileStatsDuoRow" + String(index)),
-                avatar: findPanel("ProfileStatsDuoAvatar" + String(index)),
                 name: findPanel("ProfileStatsDuoName" + String(index)),
                 games: findPanel("ProfileStatsDuoGames" + String(index)),
                 wins: findPanel("ProfileStatsDuoWins" + String(index)),
@@ -1671,7 +1649,6 @@
         duoButton = findPanel("ProfileStatsDuoButton");
         customPanel = findPanel("ProfileStatsDuoPanel");
         selfNamePanel = findPanel("SelfName");
-        rankImage = findPanel("ProfileStatsDuoRankImage");
         titleLabel = findPanel("ProfileStatsDuoTitle");
         statLockerButton = findPanel("ProfileStatsDuoStatLocker");
         accountWitness = findPanel("ProfileStatsDuoAccount");
@@ -1683,9 +1660,10 @@
         generatedLabel = findPanel("ProfileStatsDuoGenerated");
         retryButton = findPanel("ProfileStatsDuoRetry");
         bridgePanel = findPanel("ProfileStatsDuoBridge");
+        supporterTicker = findPanel("ProfileStatsDuoSupporterTicker");
         stockSectionSignature = textOf(stockSectionName);
         collectRowRefs();
-        return !!(heroList && statsBlock && stockTitle && stockLeft && stockRight && duoButton && customPanel && selfNamePanel && titleLabel && statLockerButton && bridgePanel && minMatchesDropdown);
+        return !!(heroList && statsBlock && stockTitle && stockLeft && stockRight && duoButton && customPanel && selfNamePanel && titleLabel && statLockerButton && bridgePanel && supporterTicker && minMatchesDropdown);
     }
 
     function bindEvents() {
@@ -1693,7 +1671,6 @@
         setPanelEvent(statLockerButton, "onactivate", openStatLockerProfile);
         setPanelEvent(minMatchesDropdown, "oninputsubmit", onMinMatchesChanged);
         setPanelEvent(retryButton, "onactivate", onRetry);
-        setPanelEvent(root, "onmouseover", onPanelMouseOver);
         registerBridgeEvents();
     }
 
@@ -1708,6 +1685,7 @@
         currentIdentity = readIdentity();
         renderViewedName();
         unloadBridge();
+        closeSupporterTicker();
         setVisibility(customPanel, false);
         bindEvents();
     }

@@ -79,9 +79,6 @@
 							<CitadelAvatarImage id="SelfImage" />
 							<Panel id="ProfileInfo">
 								<CitadelUserName id="SelfName" />
-								<Panel id="ProfileStatsDuoRankHost">
-									<Image id="ProfileStatsDuoRankImage" />
-								</Panel>
 								<Panel class="SteamInfo">
 									<Button id="ViewSteamProfile" onmouseout="UIHideTextTooltip();" onmouseover="UIShowTextTooltip( #Citadel_Profile_ViewSteamProfile );">
 										<Image src="s2r://panorama/images/profile/icon_steam_psd.vtex" />
@@ -151,8 +148,8 @@
 												<Label class="statValue" text="{i:commend_count}" />
 												<Label class="statLabel" text="#Citadel_Profile_Stats_Commends:f" />
 											</Panel>
+										</Panel>
 									</Panel>
-								</Panel>
 								<Panel id="StatsRight" />
 								<Panel id="ProfileStatsDuoPanel" class="ProfileStatsDuoPanel" visibility="collapse">
 									<Panel id="ProfileStatsDuoHeader" class="ProfileStatsDuoHeader">
@@ -178,56 +175,48 @@
 									<Label id="ProfileStatsDuoStatus" class="ProfileStatsDuoStatus" text="" />
 									<Panel id="ProfileStatsDuoRows" class="ProfileStatsDuoRows" visibility="collapse">
 										<Panel id="ProfileStatsDuoRow0" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar0" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName0" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames0" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins0" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate0" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow1" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar1" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName1" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames1" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins1" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate1" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow2" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar2" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName2" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames2" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins2" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate2" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow3" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar3" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName3" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames3" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins3" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate3" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow4" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar4" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName4" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames4" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins4" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate4" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow5" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar5" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName5" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames5" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins5" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate5" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow6" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar6" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName6" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames6" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins6" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWinRate6" class="ProfileStatsDuoWinRateBadge ProfileStatsDuoWinRateUnavailable" text="—" />
 										</Panel>
 										<Panel id="ProfileStatsDuoRow7" class="ProfileStatsDuoRow">
-											<Image id="ProfileStatsDuoAvatar7" class="ProfileStatsDuoAvatar" />
 											<Label id="ProfileStatsDuoName7" class="ProfileStatsDuoName" text="—" />
 											<Label id="ProfileStatsDuoGames7" class="ProfileStatsDuoNumber" text="—" />
 											<Label id="ProfileStatsDuoWins7" class="ProfileStatsDuoNumber" text="—" />
@@ -239,8 +228,11 @@
 										<Label id="ProfileStatsDuoGenerated" class="ProfileStatsDuoMetadataText" text="" />
 										<Button id="ProfileStatsDuoPoweredBy" class="ProfileStatsDuoPoweredByLink" onactivate="$.DispatchEvent( &apos;ExternalBrowserGoToURL&apos;, &apos;https://deadlock-api.com/&apos; );"><Label text="POWERED BY DEADLOCK API" /></Button>
 									</Panel>
+									<Panel id="ProfileStatsDuoSupportBar" class="ProfileStatsDuoSupportBar">
+										<CitadelHTMLPanel id="ProfileStatsDuoSupporterTicker" class="ProfileStatsDuoSupporterTicker" visible="false" hittest="false" acceptsfocus="false" />
+										<Button id="ProfileStatsDuoDonate" class="ProfileStatsDuoDonateButton" onactivate="$.DispatchEvent( &apos;ExternalBrowserGoToURL&apos;, &apos;https://ko-fi.com/hantuaraya&apos; );"><Label text="DONATE" /></Button>
+									</Panel>
 									<Button id="ProfileStatsDuoRetry" class="ProfileStatsDuoRetryButton" visibility="collapse"><Label text="Retry" /></Button>
-									<CitadelHTMLPanel id="ProfileStatsDuoBridge" class="ProfileStatsDuoBridge" visible="false" hittest="false" acceptsfocus="false" />
 								</Panel>
 							</Panel>
 						</Panel>
